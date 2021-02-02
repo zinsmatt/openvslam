@@ -8,10 +8,10 @@ Camera.name: "TUM-RGBD RGBD 01"
 Camera.setup: "RGBD"
 Camera.model: "perspective"
 
-Camera.fx: 517.306408
-Camera.fy: 516.469215
-Camera.cx: 318.643040
-Camera.cy: 255.313989
+Camera.fx: 585.0
+Camera.fy: 585.0
+Camera.cx: 320
+Camera.cy: 240
 
 Camera.k1: 0.262383
 Camera.k2: -0.953104
@@ -41,7 +41,7 @@ Feature.min_fast_threshold: 7
 #=====================#
 
 depth_threshold: 40.0
-depthmap_factor: 5000.0
+depthmap_factor: 1000.0
 
 #===========================#
 # PangolinViewer Parameters #

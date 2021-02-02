@@ -12,7 +12,7 @@
 #include <iostream>
 #include <chrono>
 #include <numeric>
-
+#include "openvslam/publish/map_publisher.h"
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <spdlog/spdlog.h>
@@ -50,6 +50,9 @@ void mono_tracking(const std::shared_ptr<openvslam::config>& cfg,
     std::vector<double> track_times;
     track_times.reserve(frames.size());
 
+    std::vector<Eigen::Matrix4d, Eigen::aligned_allocator<Eigen::Matrix4d>> poses(frames.size(), Eigen::Matrix4d::Zero());
+    std::vector<int> status(frames.size(), -1);
+
     // run the SLAM in another thread
     std::thread thread([&]() {
         for (unsigned int i = 0; i < frames.size(); ++i) {
@@ -60,7 +63,10 @@ void mono_tracking(const std::shared_ptr<openvslam::config>& cfg,
 
             if (!img.empty() && (i % frame_skip == 0)) {
                 // input the current frame and estimate the camera pose
-                SLAM.feed_monocular_frame(img, frame.timestamp_, mask);
+                poses[i] = SLAM.feed_monocular_frame(img, frame.timestamp_, mask);
+                status[i] = 1;
+                poses[i] = SLAM.get_map_publisher()->get_current_cam_pose().inverse().eval();
+                
             }
 
             const auto tp_2 = std::chrono::steady_clock::now();
@@ -83,6 +89,19 @@ void mono_tracking(const std::shared_ptr<openvslam::config>& cfg,
                 break;
             }
         }
+
+
+        std::ofstream file("out_poses_slam.txt");
+        for (int i = 0; i < poses.size(); ++i)
+        {
+            const auto& m = poses[i];
+            file << status[i] << " " << m(0, 0) << " " << m(0, 1) << " " << m(0, 2) << " " << m(0, 3) << " "
+                 << m(1, 0) << " " << m(1, 1) << " " << m(1, 2) << " " << m(1, 3) << " "
+                 << m(2, 0) << " " << m(2, 1) << " " << m(2, 2) << " " << m(2, 3) << "\n";
+        }
+        file.close();
+        // SLAM.save_frame_trajectory("out_frame_traj.txt", "KITTI");
+        // SLAM.save_keyframe_trajectory("out_keyframe_traj.txt", "KITTI");
 
         // wait until the loop BA is finished
         while (SLAM.loop_BA_is_running()) {
@@ -173,6 +192,7 @@ int main(int argc, char* argv[]) {
         return EXIT_FAILURE;
     }
     if (!vocab_file_path->is_set() || !img_dir_path->is_set() || !config_file_path->is_set()) {
+        std::cerr << vocab_file_path->is_set() << " " << img_dir_path->is_set() << " " << config_file_path->is_set() << std::endl;
         std::cerr << "invalid arguments" << std::endl;
         std::cerr << std::endl;
         std::cerr << op << std::endl;

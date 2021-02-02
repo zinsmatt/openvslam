@@ -317,11 +317,13 @@ int main(int argc, char* argv[]) {
 
     // run tracking
     if (cfg->camera_->setup_type_ == openvslam::camera::setup_type_t::Monocular) {
+        std::cout << "RUN monocular tracking" << std::endl;
         mono_tracking(cfg, vocab_file_path->value(), data_dir_path->value(),
                       frame_skip->value(), no_sleep->is_set(), auto_term->is_set(),
                       eval_log->is_set(), map_db_path->value());
     }
     else if (cfg->camera_->setup_type_ == openvslam::camera::setup_type_t::RGBD) {
+        std::cout << "RUN rgbd tracking" << std::endl;
         rgbd_tracking(cfg, vocab_file_path->value(), data_dir_path->value(),
                       frame_skip->value(), no_sleep->is_set(), auto_term->is_set(),
                       eval_log->is_set(), map_db_path->value());

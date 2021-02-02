@@ -5,6 +5,8 @@
 #include <spdlog/spdlog.h>
 #include <opencv2/imgproc.hpp>
 
+#include <iomanip>
+
 namespace openvslam {
 namespace publish {
 

@@ -78,7 +78,7 @@ void trajectory_io::save_frame_trajectory(const std::string& path, const std::st
         const Mat44_t cam_pose_wc = cam_pose_cw.inverse();
 
         if (format == "KITTI") {
-            ofs << std::setprecision(9)
+            ofs << frm_id << " " << std::setprecision(9)
                 << cam_pose_wc(0, 0) << " " << cam_pose_wc(0, 1) << " " << cam_pose_wc(0, 2) << " " << cam_pose_wc(0, 3) << " "
                 << cam_pose_wc(1, 0) << " " << cam_pose_wc(1, 1) << " " << cam_pose_wc(1, 2) << " " << cam_pose_wc(1, 3) << " "
                 << cam_pose_wc(2, 0) << " " << cam_pose_wc(2, 1) << " " << cam_pose_wc(2, 2) << " " << cam_pose_wc(2, 3) << std::endl;

@@ -10,8 +10,13 @@ public:
         frame(const std::string& img_path, const double timestamp)
             : img_path_(img_path), timestamp_(timestamp){};
 
-        const std::string img_path_;
-        const double timestamp_;
+        std::string img_path_;
+        double timestamp_;
+        frame& operator=(const frame& f) {
+            timestamp_ = f.timestamp_;
+            img_path_ = f.img_path_;
+            return *this;
+        };
     };
 
     image_sequence(const std::string& img_dir_path, const double fps);

@@ -8,10 +8,14 @@
 
 #include "openvslam/system.h"
 #include "openvslam/config.h"
+#include "openvslam/publish/map_publisher.h"
 
 #include <iostream>
 #include <chrono>
 #include <numeric>
+#include <sstream>
+#include <iomanip>
+
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgcodecs.hpp>
@@ -34,7 +38,8 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
     const cv::Mat mask = mask_img_path.empty() ? cv::Mat{} : cv::imread(mask_img_path, cv::IMREAD_GRAYSCALE);
 
     const image_sequence sequence(image_dir_path, cfg->camera_->fps_);
-    const auto frames = sequence.get_frames();
+    std::vector<image_sequence::frame> frames = sequence.get_frames();
+    // std::random_shuffle(frames.begin(), frames.end());
 
     // build a SLAM system
     openvslam::system SLAM(cfg, vocab_file_path);
@@ -61,6 +66,9 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
     std::vector<double> track_times;
     track_times.reserve(frames.size());
 
+    std::vector<Eigen::Matrix4d> poses(frames.size(), Eigen::Matrix4d::Zero());
+    std::vector<int> status(frames.size(), -1);
+
     // run the SLAM in another thread
     std::thread thread([&]() {
         for (unsigned int i = 0; i < frames.size(); ++i) {
@@ -71,7 +79,9 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
 
             if (!img.empty() && (i % frame_skip == 0)) {
                 // input the current frame and estimate the camera pose
-                SLAM.feed_monocular_frame(img, frame.timestamp_, mask);
+                poses[i] = SLAM.feed_monocular_frame(img, frame.timestamp_, mask);
+                status[i] = 1;
+                poses[i] = SLAM.get_map_publisher()->get_current_cam_pose().inverse().eval();
             }
 
             const auto tp_2 = std::chrono::steady_clock::now();
@@ -94,6 +104,17 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
                 break;
             }
         }
+
+        std::ofstream file("out_poses.txt");
+        for (int i = 0; i < poses.size(); ++i)
+        {
+            const auto& m = poses[i];
+            std::cout << m << "\n";
+            file << status[i] << " " << m(0, 0) << " " << m(0, 1) << " " << m(0, 2) << " " << m(0, 3) << " "
+                 << m(1, 0) << " " << m(1, 1) << " " << m(1, 2) << " " << m(1, 3) << " "
+                 << m(2, 0) << " " << m(2, 1) << " " << m(2, 2) << " " << m(2, 3) << "\n";
+        }
+        file.close();
 
         // wait until the loop BA is finished
         while (SLAM.loop_BA_is_running()) {
