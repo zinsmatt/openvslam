@@ -9,16 +9,25 @@
 #include "openvslam/system.h"
 #include "openvslam/config.h"
 #include "openvslam/publish/map_publisher.h"
-
+#include "openvslam/module/relocalizer.h"
+#include "openvslam/data/bow_database.h"
+#include "openvslam/data/bow_vocabulary.h"
+#include "openvslam/data/camera_database.h"
+#include "openvslam/data/map_database.h"
 #include <iostream>
 #include <chrono>
 #include <numeric>
 #include <sstream>
 #include <iomanip>
 
+#include "openvslam/util/image_converter.h"
+#include "openvslam/feature/orb_extractor.h"
+#include "openvslam/data/frame.h"
+#include "openvslam/io/map_database_io.h"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgcodecs.hpp>
+
 #include <spdlog/spdlog.h>
 #include <popl.hpp>
 
@@ -56,58 +65,92 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
     else {
         SLAM.disable_mapping_module();
     }
+    
+    auto* bow_vocab_ = new openvslam::data::bow_vocabulary();
+    bow_vocab_->loadFromBinaryFile(vocab_file_path);
+    auto* cam_db_ = new openvslam::data::camera_database(cfg->camera_);
+    auto* map_db_ = new openvslam::data::map_database();
+    auto* bow_db_ = new openvslam::data::bow_database(bow_vocab_);
 
-    // create a viewer object
-    // and pass the frame_publisher and the map_publisher
-#ifdef USE_PANGOLIN_VIEWER
-    pangolin_viewer::viewer viewer(cfg, &SLAM, SLAM.get_frame_publisher(), SLAM.get_map_publisher());
-#elif USE_SOCKET_PUBLISHER
-    socket_publisher::publisher publisher(cfg, &SLAM, SLAM.get_frame_publisher(), SLAM.get_map_publisher());
-#endif
+    openvslam::io::map_database_io map_db_io(cam_db_, map_db_, bow_db_, bow_vocab_);
+    map_db_io.load_message_pack(map_db_path);
 
-    std::vector<double> track_times;
-    track_times.reserve(frames.size());
+    auto* ini_extractor_left_ = new openvslam::feature::orb_extractor(cfg->orb_params_);
+    ini_extractor_left_->set_max_num_keypoints(ini_extractor_left_->get_max_num_keypoints() * 2);
 
     std::vector<Eigen::Matrix4d> poses(frames.size(), Eigen::Matrix4d::Zero());
     std::vector<int> status(frames.size(), -1);
 
-    // run the SLAM in another thread
-    std::thread thread([&]() {
-        // for (unsigned int i : indices) {
-        for (unsigned int i = 0; i < frames.size(); ++i) {
-            const auto& frame = frames.at(i);
-            const auto img = cv::imread(frame.img_path_, cv::IMREAD_UNCHANGED);
+    openvslam::module::relocalizer reloc(bow_db_,0.75, 0.9, 20, 50);
+    for (unsigned int i : indices) {
+        const auto& frame = frames.at(i);
 
-            const auto tp_1 = std::chrono::steady_clock::now();
+        const auto img = cv::imread(frame.img_path_, cv::IMREAD_UNCHANGED);
+        auto img_gray_ = img;
+        openvslam::util::convert_to_grayscale(img_gray_, cfg->camera_->color_order_);
 
-            if (!img.empty() && (i % frame_skip == 0)) {
-                // input the current frame and estimate the camera pose
-                std::cout << "frame " << i << " " ;
-                poses[i] = SLAM.feed_monocular_frame(img, frame.timestamp_, mask);
-                status[i] = SLAM.is_tracking() ? 1 : -1;
-                poses[i] = SLAM.get_map_publisher()->get_current_cam_pose().inverse().eval();
-            }
 
-            const auto tp_2 = std::chrono::steady_clock::now();
+        auto curr_frm_ = openvslam::data::frame(img_gray_, 0.0, ini_extractor_left_, bow_vocab_, cfg->camera_, cfg->true_depth_thr_, cv::Mat());
 
-            const auto track_time = std::chrono::duration_cast<std::chrono::duration<double>>(tp_2 - tp_1).count();
-            if (i % frame_skip == 0) {
-                track_times.push_back(track_time);
-            }
-
-            // wait until the timestamp of the next frame
-            if (!no_sleep && i < frames.size() - 1) {
-                const auto wait_time = frames.at(i + 1).timestamp_ - (frame.timestamp_ + track_time);
-                if (0.0 < wait_time) {
-                    std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(wait_time * 1e6)));
-                }
-            }
-
-            // check if the termination of SLAM system is requested or not
-            if (SLAM.terminate_is_requested()) {
-                break;
-            }
+        std::cout << "frame "  << i << " ";
+        auto res = reloc.relocalize(curr_frm_);
+        std::cout << res << std::endl;
+        if (res)
+        {
+            poses[i] = curr_frm_.cam_pose_cw_.inverse().eval();
+            status[i] = 1;
         }
+    }
+//     // create a viewer object
+//     // and pass the frame_publisher and the map_publisher
+// #ifdef USE_PANGOLIN_VIEWER
+//     pangolin_viewer::viewer viewer(cfg, &SLAM, SLAM.get_frame_publisher(), SLAM.get_map_publisher());
+// #elif USE_SOCKET_PUBLISHER
+//     socket_publisher::publisher publisher(cfg, &SLAM, SLAM.get_frame_publisher(), SLAM.get_map_publisher());
+// #endif
+
+    // std::vector<double> track_times;
+    // track_times.reserve(frames.size());
+
+
+
+    // // run the SLAM in another thread
+    // std::thread thread([&]() {
+    //     for (unsigned int i : indices) {
+    //     // for (unsigned int i = 0; i < frames.size(); ++i) {
+    //         const auto& frame = frames.at(i);
+    //         const auto img = cv::imread(frame.img_path_, cv::IMREAD_UNCHANGED);
+
+    //         const auto tp_1 = std::chrono::steady_clock::now();
+
+    //         if (!img.empty() && (i % frame_skip == 0)) {
+    //             // input the current frame and estimate the camera pose
+    //             std::cout << "frame " << i << " " ;
+    //             poses[i] = SLAM.feed_monocular_frame(img, frame.timestamp_, mask);
+    //             status[i] = 1;
+    //             poses[i] = SLAM.get_map_publisher()->get_current_cam_pose().inverse().eval();
+    //         }
+
+    //         const auto tp_2 = std::chrono::steady_clock::now();
+
+    //         const auto track_time = std::chrono::duration_cast<std::chrono::duration<double>>(tp_2 - tp_1).count();
+    //         if (i % frame_skip == 0) {
+    //             track_times.push_back(track_time);
+    //         }
+
+    //         // wait until the timestamp of the next frame
+    //         if (!no_sleep && i < frames.size() - 1) {
+    //             const auto wait_time = frames.at(i + 1).timestamp_ - (frame.timestamp_ + track_time);
+    //             if (0.0 < wait_time) {
+    //                 std::this_thread::sleep_for(std::chrono::microseconds(static_cast<unsigned int>(wait_time * 1e6)));
+    //             }
+    //         }
+
+    //         // check if the termination of SLAM system is requested or not
+    //         if (SLAM.terminate_is_requested()) {
+    //             break;
+    //         }
+    //     }
 
         std::ofstream file("out_poses.txt");
         for (int i = 0; i < poses.size(); ++i)
@@ -119,39 +162,39 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
         }
         file.close();
 
-        // wait until the loop BA is finished
-        while (SLAM.loop_BA_is_running()) {
-            std::this_thread::sleep_for(std::chrono::microseconds(5000));
-        }
+//         // wait until the loop BA is finished
+//         while (SLAM.loop_BA_is_running()) {
+//             std::this_thread::sleep_for(std::chrono::microseconds(5000));
+//         }
 
-        // automatically close the viewer
-#ifdef USE_PANGOLIN_VIEWER
-        if (auto_term) {
-            viewer.request_terminate();
-        }
-#elif USE_SOCKET_PUBLISHER
-        if (auto_term) {
-            publisher.request_terminate();
-        }
-#endif
-    });
+//         // automatically close the viewer
+// #ifdef USE_PANGOLIN_VIEWER
+//         if (auto_term) {
+//             viewer.request_terminate();
+//         }
+// #elif USE_SOCKET_PUBLISHER
+//         if (auto_term) {
+//             publisher.request_terminate();
+//         }
+// #endif
+//     });
 
-    // run the viewer in the current thread
-#ifdef USE_PANGOLIN_VIEWER
-    viewer.run();
-#elif USE_SOCKET_PUBLISHER
-    publisher.run();
-#endif
+//     // run the viewer in the current thread
+// #ifdef USE_PANGOLIN_VIEWER
+//     viewer.run();
+// #elif USE_SOCKET_PUBLISHER
+//     publisher.run();
+// #endif
 
-    thread.join();
+    // thread.join();
 
     // shutdown the SLAM process
     SLAM.shutdown();
 
-    std::sort(track_times.begin(), track_times.end());
-    const auto total_track_time = std::accumulate(track_times.begin(), track_times.end(), 0.0);
-    std::cout << "median tracking time: " << track_times.at(track_times.size() / 2) << "[s]" << std::endl;
-    std::cout << "mean tracking time: " << total_track_time / track_times.size() << "[s]" << std::endl;
+    // std::sort(track_times.begin(), track_times.end());
+    // const auto total_track_time = std::accumulate(track_times.begin(), track_times.end(), 0.0);
+    // std::cout << "median tracking time: " << track_times.at(track_times.size() / 2) << "[s]" << std::endl;
+    // std::cout << "mean tracking time: " << total_track_time / track_times.size() << "[s]" << std::endl;
 }
 
 int main(int argc, char* argv[]) {

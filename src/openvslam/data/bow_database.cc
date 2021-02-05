@@ -3,7 +3,7 @@
 #include "openvslam/data/bow_database.h"
 
 #include <spdlog/spdlog.h>
-
+#include <iostream>
 namespace openvslam {
 namespace data {
 
@@ -129,6 +129,7 @@ std::vector<keyframe*> bow_database::acquire_relocalization_candidates(frame* qr
 
     // If there are no candidates, done
     if (!set_candidates_sharing_words(qry_frm)) {
+        std::cout << "no nodes" << std::endl;
         return std::vector<keyframe*>();
     }
 

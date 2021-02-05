@@ -47,6 +47,9 @@ list(APPEND EXECUTABLE_TARGETS run_image_slam)
 add_executable(run_image_localization run_image_localization.cc util/image_util.cc)
 list(APPEND EXECUTABLE_TARGETS run_image_localization)
 
+add_executable(run_image_pure_localization run_image_pure_localization.cc util/image_util.cc)
+list(APPEND EXECUTABLE_TARGETS run_image_pure_localization)
+
 add_executable(run_video_slam run_video_slam.cc)
 list(APPEND EXECUTABLE_TARGETS run_video_slam)
 

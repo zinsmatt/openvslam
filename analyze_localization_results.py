@@ -21,6 +21,7 @@ a = (0.224995+0.227072)/2
 b = 0.6611015
 
 scale = a/b # from 7-Scene world scale to slam scale
+# scale = 1
 
 
 
@@ -30,7 +31,8 @@ o0 = R0.T
 p0 = -R0.T @ t0
 
 #%%
-pts = np.loadtxt("pointcloudd.txt", delimiter=",")
+pts = np.loadtxt("pointcloud_200.txt", delimiter=",")
+# pts = np.loadtxt("pointcloud.txt", delimiter=",")
 # pts /= scale
 
 slam_poses_file = "build/out_poses_slam.txt"
@@ -54,11 +56,15 @@ pts_w = pts
 pts_w = (o0 @ pts.T + p0).T
 
 write_ply("pointcloud_slam_world.ply", pts_w)
+# write_ply("pointcloud_slam_world_rgb.ply", pts_w)
 
 #%%
 
 
 poses_file = "build/out_poses.txt"
+# poses_file = "build/out_poses_no_tracking.txt"
+# poses_file = "build/out_poses_reloc_with_tracking.txt"
+
 data_poses_reloc = np.loadtxt(poses_file)
 
 triaxes_pts = []
@@ -66,7 +72,7 @@ triaxes_cols = []
 poses = [None] * data_poses_reloc.shape[0]
 for i in range(data_poses_reloc.shape[0]):
     status = data_poses_reloc[i, 0]
-    if np.sum(np.abs(data_poses_reloc[i, 1:])) < 1:
+    if status != 1: #np.sum(np.abs(data_poses_reloc[i, 1:])) < 1:
         print("skip")
         continue
     pose = data_poses_reloc[i, 1:].reshape((3, 4))
@@ -92,7 +98,8 @@ write_ply("poses.ply", triaxes_pts, triaxes_cols)
 
 
 #%%
-loader = SevenScenes_loader("/media/mzins/DATA1/7-Scenes/chess/seq-02")
+# loader = SevenScenes_loader("/media/mzins/DATA1/7-Scenes/chess/seq-02")
+loader = SevenScenes_loader("/media/mzins/DATA1/7-Scenes/chess/seq-01")
 
 triaxes_gt_pts = []
 triaxes_gt_cols = []
@@ -114,20 +121,28 @@ triaxes_gt_pts = np.vstack(triaxes_gt_pts)
 write_ply("poses_gt.ply", triaxes_gt_pts, triaxes_gt_cols)
 
 #%%
-pos_errors = [-1]*len(poses)
-rot_errors = [-1]*len(poses)
+pos_errors = np.array([-1.1]*len(poses))
+rot_errors = np.array([-1.1]*len(poses))
 for i, (p, gt_p) in enumerate(zip(poses, gt_poses)):
     if p is not None:
         rot_error, pos_error = pose_error(p, gt_p)
+        print(pos_error)
         pos_errors[i] = pos_error
         rot_errors[i] = np.rad2deg(rot_error)
 
-print("median pos error = ", np.median(pos_errors[88:]))
-print("median rots error = ", np.median(rot_errors[88:]))
-print("mean pos error = ", np.mean(pos_errors[88:]))
-print("mean rot error = ", np.mean(rot_errors[88:]))
+goods = np.where(pos_errors >= 0)[0]
+print("median pos error = ", np.median(pos_errors[goods]))
+print("median rots error = ", np.median(rot_errors[goods]))
+print("mean pos error = ", np.mean(pos_errors[goods]))
+print("mean rot error = ", np.mean(rot_errors[goods]))
 
 np.savetxt("POS_ERRORS.txt", pos_errors)
 np.savetxt("ROT_ERRORS.txt", rot_errors)
+
+# np.savetxt("POS_ERRORS_no_tracking.txt", pos_errors)
+# np.savetxt("ROT_ERRORS_no_tracking.txt", rot_errors)
+
+# np.savetxt("POS_ERRORS_with_tracking.txt", pos_errors)
+# np.savetxt("ROT_ERRORS_with_tracking.txt", rot_errors)
 
     

@@ -11,7 +11,7 @@
 #include <thread>
 
 #include <spdlog/spdlog.h>
-
+#include <iostream>
 namespace openvslam {
 namespace data {
 
@@ -32,6 +32,7 @@ frame::frame(const cv::Mat& img_gray, const double timestamp,
     if (keypts_.empty()) {
         spdlog::warn("frame {}: cannot extract any keypoints", id_);
     }
+    std::cout << "Extracted " << num_keypts_ << " keypoints" << std::endl;
 
     // Undistort keypoints
     camera_->undistort_keypoints(keypts_, undist_keypts_);
