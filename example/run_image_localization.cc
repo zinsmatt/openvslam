@@ -33,7 +33,8 @@
 void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
                        const std::string& vocab_file_path, const std::string& image_dir_path, const std::string& mask_img_path,
                        const std::string& map_db_path, const bool mapping,
-                       const unsigned int frame_skip, const bool no_sleep, const bool auto_term) {
+                       const unsigned int frame_skip, const bool no_sleep, const bool auto_term,
+                       const std::string& output_file) {
     // load the mask image
     const cv::Mat mask = mask_img_path.empty() ? cv::Mat{} : cv::imread(mask_img_path, cv::IMREAD_GRAYSCALE);
 
@@ -109,7 +110,7 @@ void mono_localization(const std::shared_ptr<openvslam::config>& cfg,
             }
         }
 
-        std::ofstream file("out_poses.txt");
+        std::ofstream file(output_file);
         for (int i = 0; i < poses.size(); ++i)
         {
             const auto& m = poses[i];
@@ -173,6 +174,7 @@ int main(int argc, char* argv[]) {
     auto no_sleep = op.add<popl::Switch>("", "no-sleep", "not wait for next frame in real time");
     auto auto_term = op.add<popl::Switch>("", "auto-term", "automatically terminate the viewer");
     auto debug_mode = op.add<popl::Switch>("", "debug", "debug mode");
+    auto output_file = op.add<popl::Value<std::string>>("o", "output", "output file");
     try {
         op.parse(argc, argv);
     }
@@ -223,7 +225,7 @@ int main(int argc, char* argv[]) {
     if (cfg->camera_->setup_type_ == openvslam::camera::setup_type_t::Monocular) {
         mono_localization(cfg, vocab_file_path->value(), img_dir_path->value(), mask_img_path->value(),
                           map_db_path->value(), mapping->is_set(),
-                          frame_skip->value(), no_sleep->is_set(), auto_term->is_set());
+                          frame_skip->value(), no_sleep->is_set(), auto_term->is_set(), output_file->value());
     }
     else {
         throw std::runtime_error("Invalid setup type: " + cfg->camera_->get_setup_type_string());
